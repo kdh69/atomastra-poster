@@ -8,7 +8,7 @@ The queue is one file per post in queue/<id>.json, written by the main repo's
 release asset (release "videos", <id>.mp4); the cover is covers/<id>.png.
 
 For each post whose time is within the next 40 minutes:
-  1. upload the video to Instagram (resumable upload) and wait until Instagram has processed it
+  1. have Instagram fetch the video from this repo's release, and wait until it has processed it
   2. wait until the exact time, then publish it
   3. record the media id and link in its queue file
 A post more than 3 hours late is marked "missed", never posted late. Any failure fails the run (GitHub emails Kyle).
@@ -139,27 +139,28 @@ def wait_processed(container: str, token: str, minutes: int = 20) -> None:
         time.sleep(15)
 
 
-def upload(post: dict, token: str, video: Path, with_cover: bool = True) -> str:
-    params = {"media_type": "REELS", "upload_type": "resumable", "caption": post["caption"],
+def video_url(post: dict) -> str:
+    return f"https://github.com/{REPO}/releases/download/{RELEASE}/{post['video_asset']}"
+
+
+def upload(post: dict, token: str, with_cover: bool = True) -> str:
+    """Instagram fetches the video from this repo's public release (tested 18 Nov 2026: processed in ~40 s).
+    The resumable upload returned 400 ProcessingFailedError even though the container then finished, so
+    it isn't used. No AI label: is_ai_generated is left unset (Kyle: AI label off)."""
+    params = {"media_type": "REELS", "video_url": video_url(post), "caption": post["caption"],
               "share_to_feed": "true" if post.get("share_to_feed", True) else "false"}
     if with_cover and post.get("cover_url"):
         params["cover_url"] = post["cover_url"]
     if post.get("thumb_offset_ms") is not None:
         params["thumb_offset"] = str(post["thumb_offset_ms"])
     c = graph("POST", f"{post['ig_user_id']}/media", token, **params)
-    size = video.stat().st_size
-    with video.open("rb") as f:
-        r = requests.post(c["uri"], data=f, timeout=900, headers={
-            "Authorization": f"OAuth {token}", "offset": "0", "file_size": str(size)})
-    if not r.ok:
-        raise RuntimeError(scrub(f"video upload failed: HTTP {r.status_code} {r.text[:300]}"))
-    log(f"{post['id']}: uploaded {size / 1e6:.1f} MB, container {c['id']}; waiting for Instagram to process it")
+    log(f"{post['id']}: Instagram is fetching the video (container {c['id']}); waiting for it to process")
     try:
         wait_processed(c["id"], token)
     except RuntimeError:
         if with_cover and post.get("cover_url"):
             log(f"{post['id']}: processing failed with the cover; trying once more without it")
-            return upload(post, token, video, with_cover=False)
+            return upload(post, token, with_cover=False)
         raise
     return c["id"]
 
@@ -196,9 +197,7 @@ def handle(path: Path, post: dict, tokens: dict[str, str]) -> None:
     if not token:
         raise RuntimeError(f"secret {post['token_secret']} is not set in this repo")
     if post["status"] == "queued":
-        with tempfile.TemporaryDirectory() as tmp:
-            video = download_video(post, Path(tmp))
-            post["container_id"] = upload(post, token, video)
+        post["container_id"] = upload(post, token)
         post["status"] = "uploaded"
         save(path, post, f"Uploaded {post['id']} to Instagram")
     wait = (when - now()).total_seconds()
@@ -245,15 +244,13 @@ def run() -> int:
 
 def test_upload(post_id: str) -> int:
     """Upload a queued post to Instagram and wait for processing, without publishing (the container
-    simply expires after 24 h). Proves the token, the release download and Instagram's processing."""
+    simply expires after 24 h). Proves the token, the public video link and Instagram's processing."""
     path = QUEUE / f"{post_id}.json"
     post = json.loads(path.read_text(encoding="utf-8"))
     token = load_tokens().get(post["token_secret"])
     if not token:
         raise SystemExit(f"secret {post['token_secret']} is not set")
-    with tempfile.TemporaryDirectory() as tmp:
-        video = download_video(post, Path(tmp))
-        container = upload(post, token, video)
+    container = upload(post, token)
     log(f"TEST OK: {post_id} uploaded and processed by Instagram (container {container}); NOT published")
     return 0
 
