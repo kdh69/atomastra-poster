@@ -1,0 +1,12 @@
+# Test: do Actions start in this public repo? (18 Nov 2026)
+name: hello
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "Actions run in the public repo at $(date -u)"
