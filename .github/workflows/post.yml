@@ -1,0 +1,40 @@
+# Publishes approved Instagram Reels at their times (post.py). Runs every 10 minutes; a post is
+# picked up 40 minutes before its time, uploaded, then published at the exact minute.
+# Free: this repo is public. Secrets: IG_PAGE_TOKEN_<ACCOUNT> (e.g. IG_PAGE_TOKEN_ATOMASTRA).
+name: post
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      test_upload:
+        description: "Queue id to test: upload to Instagram and wait for processing, never publish"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: post
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests
+      - name: Post what's due
+        env:
+          IG_SECRETS_JSON: ${{ toJSON(secrets) }}
+          GH_TOKEN: ${{ github.token }}
+          TEST_UPLOAD: ${{ inputs.test_upload }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$TEST_UPLOAD" ]; then python post.py --test-upload "$TEST_UPLOAD"; else python post.py; fi
