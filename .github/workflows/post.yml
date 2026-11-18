@@ -1,6 +1,6 @@
 # Publishes approved Instagram Reels at their times (post.py). Runs every 10 minutes; a post is
 # picked up 40 minutes before its time, uploaded, then published at the exact minute.
-# Free: this repo is public. Secrets: IG_PAGE_TOKEN_<ACCOUNT> (e.g. IG_PAGE_TOKEN_ATOMASTRA).
+# Free: this repo is public. Secrets: IG_PAGE_TOKEN_<ACCOUNT>; add each account's to the env below.
 name: post
 on:
   schedule:
@@ -31,7 +31,7 @@ jobs:
       - run: pip install -q requests
       - name: Post what's due
         env:
-          IG_SECRETS_JSON: ${{ toJSON(secrets) }}
+          IG_PAGE_TOKEN_ATOMASTRA: ${{ secrets.IG_PAGE_TOKEN_ATOMASTRA }}
           GH_TOKEN: ${{ github.token }}
           TEST_UPLOAD: ${{ inputs.test_upload }}
         run: |
