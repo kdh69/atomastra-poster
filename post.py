@@ -27,7 +27,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -114,15 +113,6 @@ def save(path: Path, post: dict, message: str) -> None:
         git("pull", "-q", "--rebase", check=False)
         time.sleep(3)
     raise RuntimeError("could not push the queue update")
-
-
-def download_video(post: dict, into: Path) -> Path:
-    name = post["video_asset"]
-    r = subprocess.run(["gh", "release", "download", RELEASE, "-R", REPO, "-p", name, "-D", str(into), "--clobber"],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        raise RuntimeError(f"could not download {name}: {r.stderr.strip()[:300]}")
-    return into / name
 
 
 def wait_processed(container: str, token: str, minutes: int = 20) -> None:
